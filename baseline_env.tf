@@ -99,7 +99,7 @@ resource "azurerm_subnet_network_security_group_association" "nsgprodwebtodmz" {
 # Create Public IPs for VMs
 resource "azurerm_public_ip" "vmpublicip" {
   count                        = var.vm_count
-  name                         = "vmpip${lower(random_id.random_name.hex)}"
+  name                         = "vmpip-${format("%02d", count.index+1)}"
   location                     = azurerm_resource_group.production.location
   resource_group_name          = azurerm_resource_group.production.name
   allocation_method            = "Static"
