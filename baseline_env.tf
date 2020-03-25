@@ -11,18 +11,35 @@ provider "azurerm" {
 variable "vm_count" {
   description = "Number of VMs to build"
 }
+
 variable "region" {
   description = "Azure region"
 }
+
+variable "vnet_name" {
+  description = "new vnet name"
+}
+
+variable "subnet_name" {
+  description = "new subnet name"
+}
+
 variable "vnet_address_space" {
   description = "new vnet ip address CIDR"
 }
-variable "dmz_address_prefix" {
+
+variable "subnet_address_prefix" {
   description = "subnet CIDR address for vnet"
 }
+
+variable "nsg_name" {
+  description = "name for network security group"
+}
+
 variable "vmusername" {
   description = "windows server username"
 }
+
 variable "vmpassword" {
   description = "password for windows server username"
 }
@@ -57,14 +74,14 @@ resource "azurerm_resource_group" "production" {
 
 # Create a virtual network in the production resource group
 resource "azurerm_virtual_network" "prodvnet" {
-  name                = "productionNetwork"
-  address_space       = [var.vnet_address_space]
+  name                = var.vnet_name
+  address_space       = var.vnet_address_space
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
 }
 
   resource "azurerm_subnet" "dmz" {
-  name                      = "dmzsubnet"
+  name                      = var.subnet_name
   resource_group_name       = azurerm_resource_group.production.name
   virtual_network_name      = azurerm_virtual_network.prodvnet.name
   address_prefix            = var.dmz_address_prefix
@@ -72,7 +89,7 @@ resource "azurerm_virtual_network" "prodvnet" {
 
 # create NSG for DMZ
 resource "azurerm_network_security_group" "prodwebnsg" {
-  name                = "prodwebnsg"
+  name                = var.nsg_name
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
 
@@ -85,7 +102,7 @@ resource "azurerm_network_security_group" "prodwebnsg" {
     source_port_range          = "*"
     destination_port_range     = "3389"
     source_address_prefix      = "*"
-    destination_address_prefix = var.dmz_address_prefix
+    destination_address_prefix = var.subnet_address_prefix
   }
 }
 
