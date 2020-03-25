@@ -50,7 +50,7 @@ variable "vmpassword" {
 #------------------------------------------------------------------#
 
 # Create random_id for use throughout the plan
-resource "random_id" "random_name" {
+resource random_id "random_name" {
   prefix      = "sampleenv"
   byte_length = "4"
 }
@@ -60,7 +60,7 @@ resource "random_id" "random_name" {
 #---------------------------------------------#
 
 # Create a resource group
-resource "azurerm_resource_group" "production" {
+resource azurerm_resource_group "production" {
   name     = lower(random_id.random_name.hex)
   location = var.region
 }
@@ -73,14 +73,14 @@ resource "azurerm_resource_group" "production" {
 #-------------------------------------#
 
 # Create a virtual network in the production resource group
-resource "azurerm_virtual_network" "prodvnet" {
+resource azurerm_virtual_network "prodvnet" {
   name                = var.vnet_name
   address_space       = [var.vnet_address_space]
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
 }
 
-  resource "azurerm_subnet" "dmz" {
+  resource azurerm_subnet "dmz" {
   name                      = var.subnet_name
   resource_group_name       = azurerm_resource_group.production.name
   virtual_network_name      = azurerm_virtual_network.prodvnet.name
@@ -88,7 +88,7 @@ resource "azurerm_virtual_network" "prodvnet" {
 }
 
 # create NSG for DMZ
-resource "azurerm_network_security_group" "prodwebnsg" {
+resource azurerm_network_security_group "prodwebnsg" {
   name                = var.nsg_name
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
@@ -107,14 +107,14 @@ resource "azurerm_network_security_group" "prodwebnsg" {
 }
 
 # Associate NSG with subnet
-resource "azurerm_subnet_network_security_group_association" "nsgprodwebtodmz" {
+resource azurerm_subnet_network_security_group_association "nsgprodwebtodmz" {
   subnet_id                 = azurerm_subnet.dmz.id
   network_security_group_id = azurerm_network_security_group.prodwebnsg.id
 }
 
 
 # Create Public IPs for VMs
-resource "azurerm_public_ip" "vmpublicip" {
+resource azurerm_public_ip "vmpublicip" {
   count                        = var.vm_count
   name                         = "vmpip-${format("%02d", count.index+1)}"
   location                     = azurerm_resource_group.production.location
@@ -126,7 +126,7 @@ resource "azurerm_public_ip" "vmpublicip" {
 
 
 # Create Server(s) NICs
-resource "azurerm_network_interface" "prodwebnic" {
+resource azurerm_network_interface "prodwebnic" {
   count               = var.vm_count
   name                = "prodwebnics-${format("%02d", count.index+1)}"
   location            = azurerm_resource_group.production.location
@@ -148,7 +148,7 @@ resource "azurerm_network_interface" "prodwebnic" {
 #---------------------------------------------#
 
 # Create an availability set for web servers
-resource "azurerm_availability_set" "prodwebservers" {
+resource azurerm_availability_set "prodwebservers" {
   name                = "webavailabilityset"
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
@@ -156,7 +156,7 @@ resource "azurerm_availability_set" "prodwebservers" {
 }
 
 # Create Web VMs
-resource "azurerm_windows_virtual_machine" "webprodvm" {
+resource azurerm_windows_virtual_machine "webprodvm" {
   count                 = var.vm_count
   name                  = "webprodvm-${format("%02d", count.index+1)}"
   location              = azurerm_resource_group.production.location
@@ -182,4 +182,17 @@ resource "azurerm_windows_virtual_machine" "webprodvm" {
   }
 }
 
+# Install IIS on Servers
+resource azurerm_virtual_machine_extension "vmextension" {
+  name                  = "IIS install"
+  virtual_machine_id    = element(azurerm_windows_virtual_machine.webprodvm.*.id, count.index)
+  publisher             = "Microsoft.Compute"
+  type                  = "CustomScriptExtension"
+  type_handler_version  = "1.9.5"
 
+  settings = <<SETTINGS
+    {
+        "commandToExecute": "powershell Install-WindowsFeature -name Web-Server -IncludeManagementTools"
+    }
+SETTINGS
+}
