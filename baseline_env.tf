@@ -183,7 +183,7 @@ resource azurerm_windows_virtual_machine "webprodvm" {
 }
 
 # Install IIS on Servers
-resource azurerm_virtual_machine_extension "vmextension" {
+resource azurerm_virtual_machine_extension "iis" {
   count                 = var.vm_count
   name                  = "IIS install"
   virtual_machine_id    = element(azurerm_windows_virtual_machine.webprodvm.*.id, count.index)
