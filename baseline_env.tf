@@ -84,7 +84,7 @@ resource "azurerm_virtual_network" "prodvnet" {
   name                      = var.subnet_name
   resource_group_name       = azurerm_resource_group.production.name
   virtual_network_name      = azurerm_virtual_network.prodvnet.name
-  address_prefix            = var.dmz_address_prefix
+  address_prefix            = var.subnet_address_prefix
 }
 
 # create NSG for DMZ
