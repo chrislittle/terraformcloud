@@ -121,7 +121,7 @@ resource "azurerm_public_ip" "vmpublicip" {
   resource_group_name          = azurerm_resource_group.production.name
   allocation_method            = "Static"
   sku                          = "Standard"
-  domain_name_label            = "vmpip${lower(random_id.random_name.hex)}"
+  domain_name_label            = "vmpip-${lower(random_id.random_name.hex)}-${format("%02d", count.index+1)}"
 }
 
 
