@@ -1,15 +1,18 @@
-#terraform {
-#  backend "azurerm" {
-#  }
-#}
-
 provider "azurerm" {
   version = "=2.0.0"
   features {}
 }
 
-variable "vm_count" {
-  description = "Number of VMs to build"
+variable "environment_name" {
+  description = "name of the environment to create"
+}
+
+variable "webvm_count" {
+  description = "Number of Web VMs to build"
+}
+
+variable "sqlvm_count" {
+  description = "Number of SQL VMs to build"
 }
 
 variable "region" {
@@ -36,6 +39,14 @@ variable "nsg_name" {
   description = "name for network security group"
 }
 
+variable "webavailability_set_name" {
+  description = "availability set name for web servers"
+}
+
+variable "sqlavailability_set_name" {
+  description = "availability set name for sql servers"
+}
+
 variable "vmusername" {
   description = "windows server username"
 }
@@ -44,6 +55,13 @@ variable "vmpassword" {
   description = "password for windows server username"
 }
 
+variable "webvm_prefix"{
+  description = "prefix for web server VMs"
+}
+
+variable "sqlvm_prefix" {
+  description = "prefix for sql server VM"
+}
 
 #------------------------------------------------------------------#
 # Create random name and hex for generating unique service names   #
@@ -51,7 +69,7 @@ variable "vmpassword" {
 
 # Create random_id for use throughout the plan
 resource random_id "random_name" {
-  prefix      = "sampleenv"
+  prefix      = var.environment_name
   byte_length = "4"
 }
 
@@ -113,10 +131,10 @@ resource azurerm_subnet_network_security_group_association "nsgprodwebtodmz" {
 }
 
 
-# Create Public IPs for VMs
+# Create Public IPs for Web VMs
 resource azurerm_public_ip "vmpublicip" {
-  count                        = var.vm_count
-  name                         = "vmpip-${format("%02d", count.index+1)}"
+  count                        = var.webvm_count
+  name                         = "${var.webvm_prefix}-pip-${format("%02d", count.index+1)}"
   location                     = azurerm_resource_group.production.location
   resource_group_name          = azurerm_resource_group.production.name
   allocation_method            = "Static"
@@ -125,10 +143,10 @@ resource azurerm_public_ip "vmpublicip" {
 }
 
 
-# Create Server(s) NICs
+# Create Web Server(s) NICs
 resource azurerm_network_interface "prodwebnic" {
-  count               = var.vm_count
-  name                = "prodwebnics-${format("%02d", count.index+1)}"
+  count               = var.webvm_count
+  name                = "${var.webvm_prefix}-nic-${format("%02d", count.index+1)}"
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
 
@@ -140,16 +158,38 @@ resource azurerm_network_interface "prodwebnic" {
   }
 }
 
+# Create SQL Server(s) NICs
+resource azurerm_network_interface "prodsqlnic" {
+  count               = var.sqlvm_count
+  name                = "${var.sqlvm_prefix}-nic-${format("%02d", count.index+1)}"
+  location            = azurerm_resource_group.production.location
+  resource_group_name = azurerm_resource_group.production.name
+
+  ip_configuration {
+    name                                    = "dmzbe"
+    subnet_id                               = azurerm_subnet.dmz.id
+    private_ip_address_allocation           = "dynamic"
+  }
+}
+
 
 #---------------------------------------------#
 # Create Infrastructure Compute Components:   #
-# 1. Create Availability Set                  #
+# 1. Create Availability Sets                 #
 # 2. Windows Virtual Machines                 #
 #---------------------------------------------#
 
 # Create an availability set for web servers
 resource azurerm_availability_set "prodwebservers" {
-  name                = "webavailabilityset"
+  name                = var.webavailability_set_name
+  location            = azurerm_resource_group.production.location
+  resource_group_name = azurerm_resource_group.production.name
+  managed             = "true"
+}
+
+# Create an availability set for sql servers
+resource azurerm_availability_set "sqlservers" {
+  name                = var.sqlavailability_set_name
   location            = azurerm_resource_group.production.location
   resource_group_name = azurerm_resource_group.production.name
   managed             = "true"
@@ -157,8 +197,8 @@ resource azurerm_availability_set "prodwebservers" {
 
 # Create Web VMs
 resource azurerm_windows_virtual_machine "webprodvm" {
-  count                 = var.vm_count
-  name                  = "webprodvm-${format("%02d", count.index+1)}"
+  count                 = var.webvm_count
+  name                  = "${var.webvm_prefix}-${format("%02d", count.index+1)}"
   location              = azurerm_resource_group.production.location
   resource_group_name   = azurerm_resource_group.production.name
   size                  = "Standard_DS1_v2"
@@ -171,7 +211,7 @@ resource azurerm_windows_virtual_machine "webprodvm" {
 
   os_disk {
     caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
+    storage_account_type = "Premium_LRS"
   }
 
   source_image_reference {
@@ -182,18 +222,31 @@ resource azurerm_windows_virtual_machine "webprodvm" {
   }
 }
 
-# Install IIS on Servers
-resource azurerm_virtual_machine_extension "iis" {
-  count                 = var.vm_count
-  name                  = "IIS install"
-  virtual_machine_id    = element(azurerm_windows_virtual_machine.webprodvm.*.id, count.index)
-  publisher             = "Microsoft.Compute"
-  type                  = "CustomScriptExtension"
-  type_handler_version  = "1.9.5"
+# create sql server VMs
+resource azurerm_windows_virtual_machine "sqlprodvm" {
+  count                 = var.sqlvm_count
+  name                  = "${var.sqlvm_prefix}-${format("%02d", count.index+1)}"
+  location              = azurerm_resource_group.production.location
+  resource_group_name   = azurerm_resource_group.production.name
+  size                  = "Standard_DS3_v2"
+  admin_username        = var.vmusername
+  admin_password        = var.vmpassword
+  availability_set_id   = azurerm_availability_set.sqlservers.id
+  network_interface_ids = [
+    element(azurerm_network_interface.prodsqlnic.*.id, count.index),
+  ]
 
-  settings = <<SETTINGS
-    {
-        "commandToExecute": "powershell Install-WindowsFeature -name Web-Server -IncludeManagementTools"
-    }
-SETTINGS
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Premium_LRS"
+  }
+
+  source_image_reference {
+    publisher = "MicrosoftSQLServer"
+    offer     = "SQL2017-WS2016"
+    sku       = "web"
+    version   = "latest"
+  }
 }
+
+
