@@ -78,7 +78,7 @@ resource random_id "random_name" {
 #---------------------------------------------#
 
 # Create a resource group
-resource azurerm_resource_group "production" {
+resource azurerm_resource_group "rg" {
   name     = lower(random_id.random_name.hex)
   location = var.region
 }
@@ -90,26 +90,26 @@ resource azurerm_resource_group "production" {
 # 3. Network Interfaces               #
 #-------------------------------------#
 
-# Create a virtual network in the production resource group
-resource azurerm_virtual_network "prodvnet" {
+# Create a virtual network in the resource group
+resource azurerm_virtual_network "vnet" {
   name                = var.vnet_name
   address_space       = [var.vnet_address_space]
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 }
 
-  resource azurerm_subnet "dmz" {
+  resource azurerm_subnet "subnet" {
   name                      = var.subnet_name
-  resource_group_name       = azurerm_resource_group.production.name
-  virtual_network_name      = azurerm_virtual_network.prodvnet.name
+  resource_group_name       = azurerm_resource_group.rg.name
+  virtual_network_name      = azurerm_virtual_network.vnet.name
   address_prefix            = var.subnet_address_prefix
 }
 
-# create NSG for DMZ
-resource azurerm_network_security_group "prodwebnsg" {
+# create NSG for subnet
+resource azurerm_network_security_group "nsg" {
   name                = var.nsg_name
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 
   security_rule {
     name                       = "allowrdp"
@@ -125,18 +125,18 @@ resource azurerm_network_security_group "prodwebnsg" {
 }
 
 # Associate NSG with subnet
-resource azurerm_subnet_network_security_group_association "nsgprodwebtodmz" {
-  subnet_id                 = azurerm_subnet.dmz.id
-  network_security_group_id = azurerm_network_security_group.prodwebnsg.id
+resource azurerm_subnet_network_security_group_association "nsg-assoc" {
+  subnet_id                 = azurerm_subnet.subnet.id
+  network_security_group_id = azurerm_network_security_group.nsg.id
 }
 
 
 # Create Public IPs for Web VMs
-resource azurerm_public_ip "vmpublicip" {
+resource azurerm_public_ip "webvmpublicip" {
   count                        = var.webvm_count
   name                         = "${var.webvm_prefix}-pip-${format("%02d", count.index+1)}"
-  location                     = azurerm_resource_group.production.location
-  resource_group_name          = azurerm_resource_group.production.name
+  location                     = azurerm_resource_group.rg.location
+  resource_group_name          = azurerm_resource_group.rg.name
   allocation_method            = "Static"
   sku                          = "Standard"
   domain_name_label            = "vmpip-${lower(random_id.random_name.hex)}-${format("%02d", count.index+1)}"
@@ -144,30 +144,30 @@ resource azurerm_public_ip "vmpublicip" {
 
 
 # Create Web Server(s) NICs
-resource azurerm_network_interface "prodwebnic" {
+resource azurerm_network_interface "webnic" {
   count               = var.webvm_count
   name                = "${var.webvm_prefix}-nic-${format("%02d", count.index+1)}"
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
     name                                    = "dmzfe"
-    subnet_id                               = azurerm_subnet.dmz.id
+    subnet_id                               = azurerm_subnet.subnet.id
     private_ip_address_allocation           = "dynamic"
-    public_ip_address_id                    = element(azurerm_public_ip.vmpublicip.*.id, count.index)
+    public_ip_address_id                    = element(azurerm_public_ip.webvmpublicip.*.id, count.index)
   }
 }
 
 # Create SQL Server(s) NICs
-resource azurerm_network_interface "prodsqlnic" {
+resource azurerm_network_interface "sqlnic" {
   count               = var.sqlvm_count
   name                = "${var.sqlvm_prefix}-nic-${format("%02d", count.index+1)}"
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
 
   ip_configuration {
     name                                    = "dmzbe"
-    subnet_id                               = azurerm_subnet.dmz.id
+    subnet_id                               = azurerm_subnet.subnet.id
     private_ip_address_allocation           = "dynamic"
   }
 }
@@ -180,33 +180,33 @@ resource azurerm_network_interface "prodsqlnic" {
 #---------------------------------------------#
 
 # Create an availability set for web servers
-resource azurerm_availability_set "prodwebservers" {
+resource azurerm_availability_set "web_as" {
   name                = var.webavailability_set_name
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
   managed             = "true"
 }
 
 # Create an availability set for sql servers
-resource azurerm_availability_set "sqlservers" {
+resource azurerm_availability_set "sql_as" {
   name                = var.sqlavailability_set_name
-  location            = azurerm_resource_group.production.location
-  resource_group_name = azurerm_resource_group.production.name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
   managed             = "true"
 }
 
 # Create Web VMs
-resource azurerm_windows_virtual_machine "webprodvm" {
+resource azurerm_windows_virtual_machine "webvm" {
   count                 = var.webvm_count
   name                  = "${var.webvm_prefix}-${format("%02d", count.index+1)}"
-  location              = azurerm_resource_group.production.location
-  resource_group_name   = azurerm_resource_group.production.name
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
   size                  = "Standard_DS1_v2"
   admin_username        = var.vmusername
   admin_password        = var.vmpassword
-  availability_set_id   = azurerm_availability_set.prodwebservers.id
+  availability_set_id   = azurerm_availability_set.web_as.id
   network_interface_ids = [
-    element(azurerm_network_interface.prodwebnic.*.id, count.index),
+    element(azurerm_network_interface.webnic.*.id, count.index),
   ]
 
   os_disk {
@@ -223,17 +223,17 @@ resource azurerm_windows_virtual_machine "webprodvm" {
 }
 
 # create sql server VMs
-resource azurerm_windows_virtual_machine "sqlprodvm" {
+resource azurerm_windows_virtual_machine "sqlvm" {
   count                 = var.sqlvm_count
   name                  = "${var.sqlvm_prefix}-${format("%02d", count.index+1)}"
-  location              = azurerm_resource_group.production.location
-  resource_group_name   = azurerm_resource_group.production.name
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
   size                  = "Standard_DS3_v2"
   admin_username        = var.vmusername
   admin_password        = var.vmpassword
-  availability_set_id   = azurerm_availability_set.sqlservers.id
+  availability_set_id   = azurerm_availability_set.sql_as.id
   network_interface_ids = [
-    element(azurerm_network_interface.prodsqlnic.*.id, count.index),
+    element(azurerm_network_interface.sqlnic.*.id, count.index),
   ]
 
   os_disk {
