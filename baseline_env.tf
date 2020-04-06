@@ -63,10 +63,6 @@ variable "sqlvm_prefix" {
   description = "prefix for sql server VM"
 }
 
-variable "recovery_vault_name_prefix" {
-  description = "name of the recovery vault for backups"
-}
-
 variable "backup_policy_name" {
   description = "name of the backup policy"
 }
@@ -268,7 +264,7 @@ resource azurerm_windows_virtual_machine "sqlvm" {
 
 # Create Recovery Services Vault
 resource "azurerm_recovery_services_vault" "vault" {
-  name                = "${var.recovery_vault_name_prefix}${lower(random_id.random_name.hex)}"
+  name                = "vault-${lower(random_id.random_name.hex)}"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   sku                 = "Standard"
