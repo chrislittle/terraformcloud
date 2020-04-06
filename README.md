@@ -7,6 +7,7 @@ This terraform plan builds a sample Azure environment for testing.
 * Public & Private IP Addresses
 * Virtual Network & Subnets
 * Network Security Group
+* Azure Backup
 
 
 ### PLEASE NOTE FOR THE ENTIRETY OF THIS REPOSITORY AND ALL ASSETS
