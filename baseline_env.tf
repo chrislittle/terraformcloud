@@ -268,7 +268,7 @@ resource "azurerm_recovery_services_vault" "vault" {
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   sku                 = "Standard"
-  soft_delete_enabled = true
+  soft_delete_enabled = false
 }
 
 # create backup policy
